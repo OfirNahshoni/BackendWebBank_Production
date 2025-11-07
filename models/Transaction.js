@@ -1,3 +1,5 @@
+// backend/models/Transaction.js
+
 'use strict';
 
 const mongoose = require('mongoose');

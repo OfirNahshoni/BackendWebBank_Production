@@ -40,7 +40,7 @@ function signAccessToken(payload) {
         throw new Error('JWT secret not configured');
     }
     
-    return jwt.sign(payload, secret, { expiresIn: '30m' });
+    return jwt.sign(payload, secret, { expiresIn: '2h' });
 }
 
 function createTransport() {
@@ -99,7 +99,7 @@ router.post('/signup', async (req, res, next) => {
                 from: process.env.SMTP_USER,
                 to: user.email,
                 subject: 'Activate your account',
-                text: `Use the following link to activate your account: ${activationUrl}`,
+                text: `Press the link to activate your account : ${activationUrl}`,
             });
             
             console.log('email sent to: ', user.email);

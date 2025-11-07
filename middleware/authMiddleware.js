@@ -43,6 +43,7 @@ function requireAuth(req, res, next) {
     if (!token) {
       return res.status(401).json({ error: 'Unauthorized - token not found' });
     }
+    
     const payload = verifyToken(token);
     req.user = { userId: payload.userId, email: payload.email };
     

@@ -43,7 +43,6 @@ router.get('/balance', async (req, res, next) => {
 
 // POST /transactions
 router.post('/transactions', async (req, res, next) => {
-    const session = await mongoose.startSession();
     try {
         const { recipientEmail, amount } = req.body || {};
         const senderId = req.user && req.user.userId;
@@ -58,54 +57,95 @@ router.post('/transactions', async (req, res, next) => {
             return res.status(400).json({ error: 'Invalid request body' });
         }
 
-        await session.withTransaction(async () => {
-            const sender = await User.findById(senderId).session(session);
+        // Try transactions first, fallback to non-transactional if replica set not available
+        try {
+            const session = await mongoose.startSession();
+            try {
+                await session.withTransaction(async () => {
+                    const sender = await User.findById(senderId).session(session);
+                    
+                    if (!sender) {
+                        throw Object.assign(new Error('Sender not found'), { status: 400 });
+                    }
+                    
+                    const recipient = await User.findOne({ email: recipientEmail.toLowerCase() }).session(session);
+
+                    if (!recipient) {
+                        throw Object.assign(new Error('Recipient not found'), { status: 400 });
+                    }
+
+                    const senderBal = parseFloat(sender.balance ? sender.balance.toString() : '0');
+
+                    if (senderBal < amt) {
+                        throw Object.assign(new Error('Insufficient balance'), { status: 400 });
+                    }
+                    
+                    const newSenderBal = (senderBal - amt).toFixed(2);
+                    const recipientBal = parseFloat(recipient.balance ? recipient.balance.toString() : '0');
+                    const newRecipientBal = (recipientBal + amt).toFixed(2);
+                    sender.balance = mongoose.Types.Decimal128.fromString(String(newSenderBal));
+                    recipient.balance = mongoose.Types.Decimal128.fromString(String(newRecipientBal));
+                    
+                    await sender.save({ session });
+                    await recipient.save({ session });
+                    
+                    await Transaction.create([{
+                        senderId: sender._id,
+                        receiverId: recipient._id,
+                        amount: mongoose.Types.Decimal128.fromString(String(amt.toFixed(2))),
+                    }], { session });
+                });
+                return res.json({ message: 'Transfer successful' });
+            } finally {
+                session.endSession();
+            }
+        } catch (transactionError) {
+            // If transaction error (e.g., replica set required), fallback to non-transactional
+            const errorMsg = transactionError.message || '';
             
-            if (!sender) {
-                throw Object.assign(new Error('Sender not found'), { status: 400 });
+            if (errorMsg.includes('replica set') || errorMsg.includes('Transaction numbers')) {
+                // Fallback for standalone MongoDB (no transactions)
+                const sender = await User.findById(senderId);
+
+                if (!sender) {
+                    return res.status(400).json({ error: 'Sender not found' });
+                }
+                
+                const recipient = await User.findOne({ email: recipientEmail.toLowerCase() });
+                
+                if (!recipient) {
+                    return res.status(400).json({ error: 'Recipient not found' });
+                }
+                
+                const senderBal = parseFloat(sender.balance ? sender.balance.toString() : '0');
+                
+                if (senderBal < amt) {
+                    return res.status(400).json({ error: 'Insufficient balance' });
+                }
+                
+                const newSenderBal = (senderBal - amt).toFixed(2);
+                const recipientBal = parseFloat(recipient.balance ? recipient.balance.toString() : '0');
+                const newRecipientBal = (recipientBal + amt).toFixed(2);
+                sender.balance = mongoose.Types.Decimal128.fromString(String(newSenderBal));
+                recipient.balance = mongoose.Types.Decimal128.fromString(String(newRecipientBal));
+                
+                await sender.save();
+                await recipient.save();
+
+                await Transaction.create([{
+                    senderId: sender._id,
+                    receiverId: recipient._id,
+                    amount: mongoose.Types.Decimal128.fromString(String(amt.toFixed(2))),
+                }]);
+                
+                return res.json({ message: 'Transfer successful' });
             }
-
-            const recipient = await User.findOne({ email: recipientEmail.toLowerCase() }).session(session);
-            
-            if (!recipient) {
-                throw Object.assign(new Error('Recipient not found'), { status: 400 });
-            }
-
-            const senderBal = parseFloat(sender.balance ? sender.balance.toString() : '0');
-
-            if (senderBal < amt) {
-                throw Object.assign(new Error('Insufficient balance'), { status: 400 });
-            }
-
-            const newSenderBal = (senderBal - amt).toFixed(2);
-            const recipientBal = parseFloat(recipient.balance ? recipient.balance.toString() : '0');
-            const newRecipientBal = (recipientBal + amt).toFixed(2);
-
-            sender.balance = mongoose.Types.Decimal128.fromString(String(newSenderBal));
-            recipient.balance = mongoose.Types.Decimal128.fromString(String(newRecipientBal));
-
-            await sender.save({ session });
-            await recipient.save({ session });
-            await Transaction.create([
-            {
-                senderId: sender._id,
-                receiverId: recipient._id,
-                amount: mongoose.Types.Decimal128.fromString(String(amt.toFixed(2))),
-            },
-            ], { session });
-        });
-
-        return res.json({ message: 'Transfer successful' });
-    } catch (err) {
-        if (session.inTransaction()) {
-            await session.abortTransaction();
+            // Re-throw if it's not a transaction error
+            throw transactionError;
         }
-
+    } catch (err) {
         const status = err.status || 500;
-
         return res.status(status).json({ error: err.message || 'Transfer failed' });
-    } finally {
-        session.endSession();
     }
 });
 
