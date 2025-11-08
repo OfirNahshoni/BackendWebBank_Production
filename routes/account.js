@@ -49,13 +49,14 @@ router.get('/transactions', async (req, res, next) => {
             return res.status(401).json({ error: 'Unauthorized - userId not found' });
         }
 
-        const page = Math.max(parseInt(req.query.page, 5) || 1, 1);
-        const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 10, 1), 100);
+        // page number (1, 2, 3 …), never less than 1
+        const page = Math.max(Number(req.query.page) || 1, 1);
+        // page size, default 5, but clients can override ?limit=15 if they really want
+        const limit = Math.max(Number(req.query.limit) || 5, 1);
         const skip = (page - 1) * limit;
-
         // filter transactions - user is either sender or receiver
         const filter = { $or: [{ senderId: userId }, { receiverId: userId}] };
-
+        
         // get transactions & filter by date (new -> old)
         const [docs, total] = await Promise.all([
             Transaction.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
