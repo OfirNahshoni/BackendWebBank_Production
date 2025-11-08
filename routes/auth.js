@@ -87,7 +87,7 @@ router.post('/signup', async (req, res, next) => {
 
     await user.save();
 
-    const appBase = process.env.APP_BASE_URL || 'http://localhost:3000';
+    const appBase = process.env.BACK_BASE_URL;
     const activationUrl = `${appBase}/api/v1/auth/${pin}/${activationJWT}`;
 
     // sending mail to activate account
@@ -166,11 +166,22 @@ router.get('/auth/:pincode/:JWT', async (req, res, next) => {
         user.emailVerificationPinHash = undefined;
         user.emailVerificationExpiresAt = undefined;
         await user.save();
-        const loginToken = signAccessToken({ userId: user._id.toString(), email: user.email });
 
-        return res.json({ token: loginToken });
+        // for auto-login
+        // const loginToken = signAccessToken({ userId: user._id.toString(), email: user.email });
+
+        
+        const frontBaseUrl = process.env.FRONT_BASE_URL || "http://localhost:5173";
+        
+        return res.redirect(301, `${frontBaseUrl}/login?activated=1`);
+        
+        // return res.json({ token: loginToken });
     } catch (err) {
-        return next(err);
+        // On any failure, redirect with a reason (URL-encoded)
+        const frontBaseUrl = process.env.FRONT_BASE_URL;
+        const reason = encodeURIComponent(err && err.message ? err.message : 'Activation failed');
+
+        return res.redirect(302, `${frontBaseUrl}/login?activated=0&reason=${reason}`);
     }
 });
 

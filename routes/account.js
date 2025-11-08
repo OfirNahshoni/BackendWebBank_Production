@@ -41,6 +41,55 @@ router.get('/balance', async (req, res, next) => {
     }
 });
 
+router.get('/transactions', async (req, res, next) => {
+    try {
+        const userId = req.user && req.user.userId;
+
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized - userId not found' });
+        }
+
+        const page = Math.max(parseInt(req.query.page, 5) || 1, 1);
+        const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 10, 1), 100);
+        const skip = (page - 1) * limit;
+
+        // filter transactions - user is either sender or receiver
+        const filter = { $or: [{ senderId: userId }, { receiverId: userId}] };
+
+        // get transactions & filter by date (new -> old)
+        const [docs, total] = await Promise.all([
+            Transaction.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+            Transaction.countDocuments(filter),
+        ]);
+
+        // preload sender & receiver user data
+        const neededIds = new Set(
+            docs.map(d => String(d.senderId) === String(userId) ? 
+                    String(d.receiverId) : 
+                    String(d.senderId))
+        );
+        const users = await User.find({ _id: { $in: Array.from(neededIds) } });
+        const emailById = new Map(users.map(u => [String(u._id), u.email]));
+
+        // normalize transaction data
+        const items = docs.map(d => {
+            const isOut = String(d.senderId) === String(userId);
+            const cpId = isOut ? d.receiverId : d.senderId;
+            return {
+                id: String(d._id),
+                createdAt: d.createdAt,
+                type: isOut ? 'out' : 'in',
+                amount: d.amount ? d.amount.toString() : '0.00',
+                counterpatryEmail: emailById.get(String(cpId)) || null,
+            };
+        });
+
+        return res.json({ items, page, limit, total, hasNextPage: skip + limit < total });
+    } catch (err) {
+        return next(err);
+    }
+});
+
 // POST /transactions
 router.post('/transactions', async (req, res, next) => {
     try {
