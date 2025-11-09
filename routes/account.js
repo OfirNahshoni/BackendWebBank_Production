@@ -50,7 +50,7 @@ router.get('/transactions', async (req, res, next) => {
             return res.status(401).json({ error: 'Unauthorized - userId not found' });
         }
 
-        const { page = 1, pageSize = 5, type = 'out' } = req.body || {};
+        const { page = '1', pageSize = '5', type = 'out' } = req.query || {};
         const pageNumber = Number(page) || 1;
         const sizeNumber = Number(pageSize) || 5;
         const skip = (pageNumber - 1) * sizeNumber;
