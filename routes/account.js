@@ -4,6 +4,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const User = require('../models/User');
 const Transaction = require('../models/Transaction');
+const { decimal128ToNumber } = require('../utils/money');
 const router = express.Router();
 
 function toDecimal128String(d) {
@@ -49,43 +50,51 @@ router.get('/transactions', async (req, res, next) => {
             return res.status(401).json({ error: 'Unauthorized - userId not found' });
         }
 
-        // page number (1, 2, 3 …), never less than 1
-        const page = Math.max(Number(req.query.page) || 1, 1);
-        // page size, default 5, but clients can override ?limit=15 if they really want
-        const limit = Math.max(Number(req.query.limit) || 5, 1);
-        const skip = (page - 1) * limit;
-        // filter transactions - user is either sender or receiver
-        const filter = { $or: [{ senderId: userId }, { receiverId: userId}] };
-        
-        // get transactions & filter by date (new -> old)
+        const { page = 1, pageSize = 5, type = 'out' } = req.body || {};
+        const pageNumber = Number(page) || 1;
+        const sizeNumber = Number(pageSize) || 5;
+        const skip = (pageNumber - 1) * sizeNumber;
+        const isOut = type === 'out';
+        const filter = isOut ? { senderId: userId } : { receiverId: userId };
+
         const [docs, total] = await Promise.all([
-            Transaction.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+            Transaction.find(filter)
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(sizeNumber)
+                .lean(),
             Transaction.countDocuments(filter),
         ]);
 
-        // preload sender & receiver user data
-        const neededIds = new Set(
-            docs.map(d => String(d.senderId) === String(userId) ? 
-                    String(d.receiverId) : 
-                    String(d.senderId))
+        const counterpartIds = docs.map((doc) =>
+            isOut ? doc.receiverId : doc.senderId
         );
-        const users = await User.find({ _id: { $in: Array.from(neededIds) } });
-        const emailById = new Map(users.map(u => [String(u._id), u.email]));
+        const users = await User.find({ _id: { $in: counterpartIds } }).lean();
+        const emailById = new Map(users.map((user) => [String(user._id), user.email]));
 
-        // normalize transaction data
-        const items = docs.map(d => {
-            const isOut = String(d.senderId) === String(userId);
-            const cpId = isOut ? d.receiverId : d.senderId;
+        const items = docs.map((doc, index) => {
+            const outbound = String(doc.senderId) === String(userId);
+            const counterpartyId = outbound ? doc.receiverId : doc.senderId;
             return {
-                id: String(d._id),
-                createdAt: d.createdAt,
-                type: isOut ? 'out' : 'in',
-                amount: d.amount ? d.amount.toString() : '0.00',
-                counterpatryEmail: emailById.get(String(cpId)) || null,
+                id: String(doc._id),
+                amount: decimal128ToNumber(doc.amount),
+                otherMail: emailById.get(String(counterpartyId)) || null,
+                date: doc.createdAt,
+                row: skip + index + 1,
             };
         });
 
-        return res.json({ items, page, limit, total, hasNextPage: skip + limit < total });
+        const hasNextPage = skip + docs.length < total;
+        const totalPages = Math.ceil(total / sizeNumber) || 0;
+
+        return res.json({
+            items,
+            total,
+            totalPages,
+            page: pageNumber,
+            pageSize: sizeNumber,
+            hasNextPage,
+        });
     } catch (err) {
         return next(err);
     }
@@ -221,8 +230,13 @@ router.post('/update-balance', async (req, res, next) => {
             return res.status(401).json({ error: 'Unauthorized - user not found' });
         }
 
-        const current = parseFloat(user.balance ? user.balance.toString() : '0');
-        const newBalance = (current + delta);
+        const currentBalance = parseFloat(user.balance ? user.balance.toString() : '0');
+        
+        if (delta < 0 && Math.abs(delta) > currentBalance) {
+            return res.status(400).json({ error: 'Insufficient balance' });
+        }
+
+        const newBalance = (currentBalance + delta);
         user.balance = mongoose.Types.Decimal128.fromString(String(newBalance.toFixed(3)));
         await user.save();
 
