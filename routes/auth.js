@@ -57,16 +57,16 @@ function createTransport() {
 
     return nodemailer.createTransport({
         host: process.env.SMTP_HOST,
-        port: process.env.SMTP_PORT,
-        secure: true,
-        requireTLS: false,
+        port: Number(process.env.SMTP_PORT),
+        secure: false,
+        // requireTLS: false,
         auth: {
             user: process.env.SMTP_USER,    // apikey
             pass: process.env.SMTP_PASS,    // password of SendGrid's api
         },
-        tls: {
-            ciphers: 'TLSv1.2',
-        },
+        // tls: {
+        //     ciphers: 'TLSv1.2',
+        // },
     });
 }
 
