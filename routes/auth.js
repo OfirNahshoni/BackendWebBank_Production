@@ -51,10 +51,10 @@ function createTransport() {
     //     auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
     // });
     return nodemailer.createTransport({
-    host: SMTP_HOST,
-    port: SMTP_PORT,
-    secure: SMTP_PORT === 465,
-    requireTLS: SMTP_PORT !== 465,
+    host: process.env.SMTP_HOST,
+    port: process.env.SMTP_PORT,
+    secure: process.env.SMTP_PORT === 465,
+    requireTLS: process.env.SMTP_PORT !== 465,
     auth: {
       user: process.env.SMTP_USER, // for SendGrid this must literally be "apikey"
       pass: process.env.SMTP_PASS,
