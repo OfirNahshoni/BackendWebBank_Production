@@ -51,20 +51,18 @@ function createTransport() {
     //     auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
     // });
     return nodemailer.createTransport({
-       service: 'gmail',
-       host: process.env.SMTP_HOST ?? 'smtp.gmail.com',
-       port: Number(process.env.SMTP_PORT ?? 587),
-       secure: false,             // use STARTTLS
-       requireTLS: true,
-       auth: {
-         user: process.env.SMTP_USER,
-         pass: process.env.SMTP_PASS,
-       },
-       tls: {
-         ciphers: 'TLSv1.2',
-       },
-       family: 4,                 // prefer IPv4; avoids IPv6 timeout on Render
-     });
+    host: SMTP_HOST,
+    port: SMTP_PORT,
+    secure: SMTP_PORT === 465,
+    requireTLS: SMTP_PORT !== 465,
+    auth: {
+      user: process.env.SMTP_USER, // for SendGrid this must literally be "apikey"
+      pass: process.env.SMTP_PASS,
+    },
+    tls: {
+      ciphers: 'TLSv1.2',
+    },
+  });
 }
 
 // POST /signup
