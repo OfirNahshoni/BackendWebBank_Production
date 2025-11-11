@@ -180,7 +180,7 @@ router.post('/signup', async (req, res, next) => {
       
       if (transporter) {
           await transporter.sendMail({
-              from: process.env.SMTP_FROM_EMAIL,
+              from: process.env.SMTP_USER,
               to: user.email,
               subject: 'Activate your account',
               text: `Press the link to activate your account : ${activationUrl}`,
