@@ -54,14 +54,15 @@ function createTransport() {
     console.log("port: ", process.env.SMTP_PORT);
     console.log("user: ", process.env.SMTP_USER);
     console.log("pass: ", process.env.SMTP_PASS);
+
     return nodemailer.createTransport({
         host: process.env.SMTP_HOST,
         port: process.env.SMTP_PORT,
-        secure: process.env.SMTP_PORT === 465,
-        requireTLS: process.env.SMTP_PORT !== 465,
+        secure: true,
+        requireTLS: false,
         auth: {
-            user: process.env.SMTP_USER, // for SendGrid this must literally be "apikey"
-            pass: process.env.SMTP_PASS,
+            user: process.env.SMTP_USER,    // apikey
+            pass: process.env.SMTP_PASS,    // password of SendGrid's api
         },
         tls: {
             ciphers: 'TLSv1.2',
@@ -135,7 +136,11 @@ function createTransport() {
 
 router.post('/signup', async (req, res, next) => {
   const { email, password, phone } = req.body || {};
-  
+  console.log('back url: ', process.env.BACK_BASE_URL);
+  console.log("host: ", process.env.SMTP_HOST);
+    console.log("port: ", process.env.SMTP_PORT);
+    console.log("user: ", process.env.SMTP_USER);
+    console.log("pass: ", process.env.SMTP_PASS);
   if (!isValidEmail(email) || !isNonEmptyString(password) || !isNonEmptyString(phone)) {
       return res.status(400).json({ error: 'Invalid request body' });
   }
@@ -175,7 +180,7 @@ router.post('/signup', async (req, res, next) => {
       
       if (transporter) {
           await transporter.sendMail({
-              from: process.env.SMTP_USER,
+              from: process.env.SMTP_FROM_EMAIL,
               to: user.email,
               subject: 'Activate your account',
               text: `Press the link to activate your account : ${activationUrl}`,
