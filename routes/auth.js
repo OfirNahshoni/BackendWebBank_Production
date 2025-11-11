@@ -44,12 +44,27 @@ function signAccessToken(payload) {
 }
 
 function createTransport() {
+    // return nodemailer.createTransport({
+    //     host: process.env.SMTP_HOST,
+    //     port: Number(process.env.SMTP_PORT),
+    //     secure: false,
+    //     auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+    // });
     return nodemailer.createTransport({
-        host: process.env.SMTP_HOST,
-        port: Number(process.env.SMTP_PORT),
-        secure: false,
-        auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-    });
+       service: 'gmail',
+       host: process.env.SMTP_HOST ?? 'smtp.gmail.com',
+       port: Number(process.env.SMTP_PORT ?? 587),
+       secure: false,             // use STARTTLS
+       requireTLS: true,
+       auth: {
+         user: process.env.SMTP_USER,
+         pass: process.env.SMTP_PASS,
+       },
+       tls: {
+         ciphers: 'TLSv1.2',
+       },
+       family: 4,                 // prefer IPv4; avoids IPv6 timeout on Render
+     });
 }
 
 // POST /signup
