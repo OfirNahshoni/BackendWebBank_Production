@@ -50,22 +50,31 @@ function createTransport() {
     //     secure: false,
     //     auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
     // });
-    console.log("host: ", process.env.SMTP_HOST);
-    console.log("port: ", process.env.SMTP_PORT);
-    console.log("user: ", process.env.SMTP_USER);
-    console.log("pass: ", process.env.SMTP_PASS);
+    // console.log("host: ", process.env.SMTP_HOST);
+    // console.log("port: ", process.env.SMTP_PORT);
+    // console.log("user: ", process.env.SMTP_USER);
+    // console.log("pass: ", process.env.SMTP_PASS);
 
-    return nodemailer.createTransport({
+    // return transporter = nodemailer.createTransport({
+    //     host: process.env.SMTP_HOST,
+    //     port: process.env.SMTP_PORT,
+    //     secure: true,
+    //     auth: {
+    //         user: process.env.SMTP_USER,
+    //         pass: process.env.SMPT_PASS
+    //     },
+    //     tls: {
+    //         rejectUnauthorized: false
+    //     }
+    // });
+
+    transporter = nodemailer.createTransport({
         host: process.env.SMTP_HOST,
+        secure: true,
         port: process.env.SMTP_PORT,
-        secure: false,
-        requireTLS: false,
         auth: {
-            user: process.env.SMTP_USER,    // apikey
-            pass: process.env.SMTP_PASS,    // password of SendGrid's api
-        },
-        tls: {
-            ciphers: 'TLSv1.2',
+            user: process.env.SMTP_USER,
+            pass: process.env.SMPT_PASS,
         },
     });
 }
