@@ -88,6 +88,11 @@ async function sendActivationSMS(phoneNumber, activationUrl) {
         formattedPhone = '+' + formattedPhone;
     }
     
+    // Log phone number formatting for debugging
+    console.log('Original phone:', phoneNumber);
+    console.log('Formatted phone:', formattedPhone);
+    console.log('From number:', fromNumber);
+    
     // Send SMS via Twilio API
     // This makes an HTTPS request to Twilio's servers - no port blocking!
     const message = await client.messages.create({
@@ -200,10 +205,19 @@ router.post('/signup', async (req, res, next) => {
   // Send activation SMS instead of email
   try {
       console.log('Sending activation SMS to:', phone);
+      console.log('Activation URL:', activationUrl);
+      console.log('Twilio Account SID:', process.env.TWILIO_ACCOUNT_SID ? 'Set' : 'Missing');
+      console.log('Twilio Auth Token:', process.env.TWILIO_AUTH_TOKEN ? 'Set' : 'Missing');
+      console.log('Twilio Phone Number:', process.env.TWILIO_PHONE_NUMBER || 'Missing');
+      
       const smsResult = await sendActivationSMS(phone, activationUrl);
       console.log('SMS sent successfully. Message SID:', smsResult.sid);
+      console.log('SMS Status:', smsResult.status);
   } catch (smsErr) {
-      console.error('Error sending SMS:', smsErr.message);
+      console.error('Error sending SMS - Full error:', smsErr);
+      console.error('Error sending SMS - Message:', smsErr.message);
+      console.error('Error sending SMS - Code:', smsErr.code);
+      console.error('Error sending SMS - Stack:', smsErr.stack);
       // Don't throw - we still want to return success since user was created
       // The user can request a new activation link if needed
   }
