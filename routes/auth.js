@@ -3,7 +3,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const nodemailer = require('nodemailer');
+const twilio = require('twilio');
 const mongoose = require('mongoose');
 const User = require('../models/User');
 
@@ -43,40 +43,61 @@ function signAccessToken(payload) {
     return jwt.sign(payload, secret, { expiresIn: '2h' });
 }
 
-function createTransport() {
-    // return nodemailer.createTransport({
-    //     host: process.env.SMTP_HOST,
-    //     port: Number(process.env.SMTP_PORT),
-    //     secure: false,
-    //     auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-    // });
-    // console.log("host: ", process.env.SMTP_HOST);
-    // console.log("port: ", process.env.SMTP_PORT);
-    // console.log("user: ", process.env.SMTP_USER);
-    // console.log("pass: ", process.env.SMTP_PASS);
+/**
+ * Send activation SMS using Twilio
+ * 
+ * Twilio is a cloud communications platform that provides APIs for sending SMS, 
+ * making phone calls, and other communication services. It uses HTTPS REST APIs, 
+ * so it works perfectly on Render (no port blocking issues).
+ * 
+ * How it works:
+ * 1. You create a Twilio account and get credentials (Account SID, Auth Token)
+ * 2. You get a phone number from Twilio (or use a trial number for testing)
+ * 3. You use the Twilio SDK to send SMS via their API
+ * 
+ * @param {string} phoneNumber - The user's phone number (e.g., "0523134556" or "+972523134556")
+ * @param {string} activationUrl - The full activation URL to send in the SMS
+ * @returns {Promise} - Twilio message object
+ */
+async function sendActivationSMS(phoneNumber, activationUrl) {
+    // Get Twilio credentials from environment variables
+    const accountSid = process.env.TWILIO_ACCOUNT_SID;
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
+    const fromNumber = process.env.TWILIO_PHONE_NUMBER;
 
-    // return transporter = nodemailer.createTransport({
-    //     host: process.env.SMTP_HOST,
-    //     port: process.env.SMTP_PORT,
-    //     secure: true,
-    //     auth: {
-    //         user: process.env.SMTP_USER,
-    //         pass: process.env.SMPT_PASS
-    //     },
-    //     tls: {
-    //         rejectUnauthorized: false
-    //     }
-    // });
+    // Validate that all required credentials are present
+    if (!accountSid || !authToken || !fromNumber) {
+        throw new Error('Twilio credentials not configured. Please set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER in your environment variables.');
+    }
 
-    transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST,
-        secure: true,
-        port: process.env.SMTP_PORT,
-        auth: {
-            user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASS,
-        },
+    // Initialize Twilio client with credentials
+    // The client handles all API communication with Twilio's servers
+    const client = twilio(accountSid, authToken);
+    
+    // Format phone number to international format (required by Twilio)
+    // Twilio requires phone numbers in E.164 format: +[country code][number]
+    // Example: +972523134556 (Israel) or +1234567890 (US)
+    let formattedPhone = phoneNumber.trim();
+    
+    // If phone doesn't start with +, we need to add country code
+    // For Israeli numbers starting with 0, replace 0 with +972
+    if (formattedPhone.startsWith('0')) {
+        formattedPhone = '+972' + formattedPhone.substring(1);
+    } else if (!formattedPhone.startsWith('+')) {
+        // If no country code, assume it's missing and add + (you may need to adjust this based on your country)
+        formattedPhone = '+' + formattedPhone;
+    }
+    
+    // Send SMS via Twilio API
+    // This makes an HTTPS request to Twilio's servers - no port blocking!
+    const message = await client.messages.create({
+        body: `Activate your account: ${activationUrl}`,
+        from: fromNumber,  // Your Twilio phone number
+        to: formattedPhone // Recipient's phone number
     });
+
+    // Return the message object (contains message SID, status, etc.)
+    return message;
 }
 
 // POST /signup
@@ -145,11 +166,7 @@ function createTransport() {
 
 router.post('/signup', async (req, res, next) => {
   const { email, password, phone } = req.body || {};
-  console.log('back url: ', process.env.BACK_BASE_URL);
-  console.log("host: ", process.env.SMTP_HOST);
-    console.log("port: ", process.env.SMTP_PORT);
-    console.log("user: ", process.env.SMTP_USER);
-    console.log("pass: ", process.env.SMTP_PASS);
+  
   if (!isValidEmail(email) || !isNonEmptyString(password) || !isNonEmptyString(phone)) {
       return res.status(400).json({ error: 'Invalid request body' });
   }
@@ -177,29 +194,18 @@ router.post('/signup', async (req, res, next) => {
       emailVerificationExpiresAt: expiresAt,
   });
 
-  // Removed: await user.save();
-
   const appBase = process.env.BACK_BASE_URL;
   const activationUrl = `${appBase}/api/v1/auth/${pin}/${activationJWT}`;
 
+  // Send activation SMS instead of email
   try {
-      console.log('before create transport');
-      const transporter = createTransport();
-      console.log('after create transport');
-      
-      if (transporter) {
-          await transporter.sendMail({
-              from: process.env.SMTP_USER,
-              to: user.email,
-              subject: 'Activate your account',
-              text: `Press the link to activate your account : ${activationUrl}`,
-          });
-          
-          console.log('email sent to: ', user.email);
-      }
-  } catch (_mailErr) {
-      console.log('error sending mail: ', _mailErr);
+      console.log('Sending activation SMS to:', phone);
+      const smsResult = await sendActivationSMS(phone, activationUrl);
+      console.log('SMS sent successfully. Message SID:', smsResult.sid);
+  } catch (smsErr) {
+      console.error('Error sending SMS:', smsErr.message);
       // Don't throw - we still want to return success since user was created
+      // The user can request a new activation link if needed
   }
 
   return res.status(201).json({ message: 'User registered successfully' });
