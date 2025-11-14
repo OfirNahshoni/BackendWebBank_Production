@@ -3,6 +3,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const nodemailer = require('nodemailer');
 const twilio = require('twilio');
 const mongoose = require('mongoose');
 const User = require('../models/User');
