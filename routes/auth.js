@@ -43,186 +43,75 @@ function signAccessToken(payload) {
     return jwt.sign(payload, secret, { expiresIn: '2h' });
 }
 
-/**
- * Send activation SMS using Twilio
- * 
- * Twilio is a cloud communications platform that provides APIs for sending SMS, 
- * making phone calls, and other communication services. It uses HTTPS REST APIs, 
- * so it works perfectly on Render (no port blocking issues).
- * 
- * How it works:
- * 1. You create a Twilio account and get credentials (Account SID, Auth Token)
- * 2. You get a phone number from Twilio (or use a trial number for testing)
- * 3. You use the Twilio SDK to send SMS via their API
- * 
- * @param {string} phoneNumber - The user's phone number (e.g., "0523134556" or "+972523134556")
- * @param {string} activationUrl - The full activation URL to send in the SMS
- * @returns {Promise} - Twilio message object
- */
-async function sendActivationSMS(phoneNumber, activationUrl) {
-    // Get Twilio credentials from environment variables
-    const accountSid = process.env.TWILIO_ACCOUNT_SID;
-    const authToken = process.env.TWILIO_AUTH_TOKEN;
-    const fromNumber = process.env.TWILIO_PHONE_NUMBER;
-
-    // Validate that all required credentials are present
-    if (!accountSid || !authToken || !fromNumber) {
-        throw new Error('Twilio credentials not configured. Please set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER in your environment variables.');
-    }
-
-    // Initialize Twilio client with credentials
-    // The client handles all API communication with Twilio's servers
-    const client = twilio(accountSid, authToken);
-    
-    // Format phone number to international format (required by Twilio)
-    // Twilio requires phone numbers in E.164 format: +[country code][number]
-    // Example: +972523134556 (Israel) or +1234567890 (US)
-    let formattedPhone = phoneNumber.trim();
-    
-    // If phone doesn't start with +, we need to add country code
-    // For Israeli numbers starting with 0, replace 0 with +972
-    if (formattedPhone.startsWith('0')) {
-        formattedPhone = '+972' + formattedPhone.substring(1);
-    } else if (!formattedPhone.startsWith('+')) {
-        // If no country code, assume it's missing and add + (you may need to adjust this based on your country)
-        formattedPhone = '+' + formattedPhone;
-    }
-    
-    // Log phone number formatting for debugging
-    console.log('Original phone:', phoneNumber);
-    console.log('Formatted phone:', formattedPhone);
-    console.log('From number:', fromNumber);
-    
-    // Send SMS via Twilio API
-    // This makes an HTTPS request to Twilio's servers - no port blocking!
-    const message = await client.messages.create({
-        body: `Activate your account: ${activationUrl}`,
-        from: fromNumber,  // Your Twilio phone number
-        to: formattedPhone // Recipient's phone number
+function createTransport() {
+    return nodemailer.createTransport({
+        host: process.env.SMTP_HOST,
+        port: Number(process.env.SMTP_PORT),
+        secure: false,
+        auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
     });
-
-    // Return the message object (contains message SID, status, etc.)
-    return message;
 }
 
-// POST /signup
-// router.post('/signup', async (req, res, next) => {
-//   try {
-//     const { email, password, phone } = req.body || {};
-    
-//     if (!isValidEmail(email) || !isNonEmptyString(password) || !isNonEmptyString(phone)) {
-//         return res.status(400).json({ error: 'Invalid request body' });
-//     }
-
-//     const existing = await User.findOne({ email: email.toLowerCase() }).lean();
-
-//     if (existing) {
-//         return res.status(400).json({ error: 'Email already registered' });
-//     }
-
-//     const passwordHash = await bcrypt.hash(password, 10);
-//     const pin = genPin();
-//     const pinHash = await bcrypt.hash(pin, 10);
-//     const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
-//     const nonce = new mongoose.Types.ObjectId().toString();
-//     const activationJWT = signActivationToken({ email: email.toLowerCase(), nonce });
-
-//     // create user in db
-//     const user = await User.create({
-//         email: email.toLowerCase(),
-//         phoneNumber: phone,
-//         password: passwordHash,
-//         status: 'inactive',
-//         balance: mongoose.Types.Decimal128.fromString('500.000'),
-//         emailVerificationPinHash: pinHash,
-//         emailVerificationExpiresAt: expiresAt,
-//     });
-
-//     await user.save();
-
-//     const appBase = process.env.BACK_BASE_URL;
-//     const activationUrl = `${appBase}/api/v1/auth/${pin}/${activationJWT}`;
-
-//     // sending mail to activate account
-//     // try {
-//         console.log('before create transport');
-//         const transporter = createTransport();
-//         console.log('after create transport');
-        
-//         if (transporter) {
-//             await transporter.sendMail({
-//                 from: process.env.SMTP_USER,
-//                 to: user.email,
-//                 subject: 'Activate your account',
-//                 text: `Press the link to activate your account : ${activationUrl}`,
-//             });
-            
-//             console.log('email sent to: ', user.email);
-//         }
-//     // } catch (_mailErr) {
-//         // console.log('error sending mail: ', _mailErr);
-//     // }
-
-//     return res.status(201).json({ message: 'User registered successfully' });
-// //   } catch (err) {
-//     // return next(err);
-// //   }
-// });
 
 router.post('/signup', async (req, res, next) => {
-  const { email, password, phone } = req.body || {};
-  
-  if (!isValidEmail(email) || !isNonEmptyString(password) || !isNonEmptyString(phone)) {
-      return res.status(400).json({ error: 'Invalid request body' });
-  }
-
-  const existing = await User.findOne({ email: email.toLowerCase() }).lean();
-
-  if (existing) {
-      return res.status(400).json({ error: 'Email already registered' });
-  }
-
-  const passwordHash = await bcrypt.hash(password, 10);
-  const pin = genPin();
-  const pinHash = await bcrypt.hash(pin, 10);
-  const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
-  const nonce = new mongoose.Types.ObjectId().toString();
-  const activationJWT = signActivationToken({ email: email.toLowerCase(), nonce });
-
-  const user = await User.create({
-      email: email.toLowerCase(),
-      phoneNumber: phone,
-      password: passwordHash,
-      status: 'inactive',
-      balance: mongoose.Types.Decimal128.fromString('500.000'),
-      emailVerificationPinHash: pinHash,
-      emailVerificationExpiresAt: expiresAt,
-  });
-
-  const appBase = process.env.BACK_BASE_URL;
-  const activationUrl = `${appBase}/api/v1/auth/${pin}/${activationJWT}`;
-
-  // Send activation SMS instead of email
   try {
-      console.log('Sending activation SMS to:', phone);
-      console.log('Activation URL:', activationUrl);
-      console.log('Twilio Account SID:', process.env.TWILIO_ACCOUNT_SID ? 'Set' : 'Missing');
-      console.log('Twilio Auth Token:', process.env.TWILIO_AUTH_TOKEN ? 'Set' : 'Missing');
-      console.log('Twilio Phone Number:', process.env.TWILIO_PHONE_NUMBER || 'Missing');
-      
-      const smsResult = await sendActivationSMS(phone, activationUrl);
-      console.log('SMS sent successfully. Message SID:', smsResult.sid);
-      console.log('SMS Status:', smsResult.status);
-  } catch (smsErr) {
-      console.error('Error sending SMS - Full error:', smsErr);
-      console.error('Error sending SMS - Message:', smsErr.message);
-      console.error('Error sending SMS - Code:', smsErr.code);
-      console.error('Error sending SMS - Stack:', smsErr.stack);
-      // Don't throw - we still want to return success since user was created
-      // The user can request a new activation link if needed
-  }
+    const { email, password, phone } = req.body || {};
+    
+    if (!isValidEmail(email) || !isNonEmptyString(password) || !isNonEmptyString(phone)) {
+        return res.status(400).json({ error: 'Invalid request body' });
+    }
 
-  return res.status(201).json({ message: 'User registered successfully' });
+    const existing = await User.findOne({ email: email.toLowerCase() }).lean();
+
+    if (existing) {
+        return res.status(400).json({ error: 'Email already registered' });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const pin = genPin();
+    const pinHash = await bcrypt.hash(pin, 10);
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
+    const nonce = new mongoose.Types.ObjectId().toString();
+    const activationJWT = signActivationToken({ email: email.toLowerCase(), nonce });
+
+    // create user in db
+    const user = await User.create({
+        email: email.toLowerCase(),
+        phoneNumber: phone,
+        password: passwordHash,
+        status: 'inactive',
+        balance: mongoose.Types.Decimal128.fromString('500.000'),
+        emailVerificationPinHash: pinHash,
+        emailVerificationExpiresAt: expiresAt,
+    });
+
+    await user.save();
+
+    const appBase = process.env.BACK_BASE_URL;
+    const activationUrl = `${appBase}/api/v1/auth/${pin}/${activationJWT}`;
+
+    // sending mail to activate account
+    try {
+        const transporter = createTransport();
+        
+        if (transporter) {
+            await transporter.sendMail({
+                from: process.env.SMTP_USER,
+                to: user.email,
+                subject: 'Activate your account',
+                text: `Press the link to activate your account : ${activationUrl}`,
+            });
+            
+            console.log('email sent to: ', user.email);
+        }
+    } catch (_mailErr) {
+        console.log('error sending mail: ', _mailErr);
+    }
+
+    return res.status(201).json({ message: 'User registered successfully' });
+  } catch (err) {
+    return next(err);
+  }
 });
 
 // PUT /auth/:pincode/:JWT
