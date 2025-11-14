@@ -197,7 +197,7 @@ router.post('/login', async (req, res, next) => {
     const user = await User.findOne({ email: email.toLowerCase() });
     
     if (!user) {
-        return res.status(401).json({ error: 'Invalid credentials' });
+        return res.status(401).json({ error: 'User not found' });
     }
 
     if (user.status === 'inactive') {
@@ -207,7 +207,7 @@ router.post('/login', async (req, res, next) => {
     const ok = await bcrypt.compare(password, user.password);
 
     if (!ok) {
-        return res.status(401).json({ error: 'Invalid credentials' });
+        return res.status(401).json({ error: 'Password is incorrect' });
     }
 
     const token = signAccessToken({ userId: user._id.toString(), email: user.email });
