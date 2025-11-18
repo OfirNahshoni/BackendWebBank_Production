@@ -120,73 +120,57 @@ router.post('/signup', async (req, res, next) => {
 
 // PUT /auth/:pincode/:JWT
 router.get('/auth/:pincode/:JWT', async (req, res, next) => {
-    try {
-        const pin = req.params.pincode;
-        const token = req.params.JWT;
-        
-        if (!isNonEmptyString(pin) || !isNonEmptyString(token)) {
-            return res.status(400).json({ error: 'Invalid activation data - pin or jwt missing' });
-        }
-        
-        const secret = process.env.JWT_ACCESS_SECRET;
-        
-        if (!secret) {
-            return res.status(500).json({ error: 'Server misconfigured - secret jwt missing' });
-        }
+    const pin = req.params.pincode;
+    const token = req.params.JWT;
 
-        let decoded;
-
-        try {
-            decoded = jwt.verify(token, secret);
-        } catch (_e) {
-            return res.status(400).json({ error: 'Invalid or expired token' });
-        }
-
-        const email = decoded && decoded.email;
-
-        if (!isValidEmail(email)) {
-            return res.status(400).json({ error: 'Invalid token payload' });
-        }
-
-        const user = await User.findOne({ email: email.toLowerCase() });
-        
-        if (!user) {
-            return res.status(400).json({ error: 'User not found' });
-        }
-
-        if (!user.emailVerificationPinHash || !user.emailVerificationExpiresAt) {
-            return res.status(400).json({ error: 'Activation not initialized' });
-        }
-        if (user.emailVerificationExpiresAt.getTime() < Date.now()) {
-            return res.status(400).json({ error: 'PIN expired' });
-        }
-        const ok = await bcrypt.compare(pin, user.emailVerificationPinHash);
-
-        if (!ok) {
-            return res.status(400).json({ error: 'Invalid PIN' });
-        }
-
-        user.status = 'active';
-        user.emailVerificationPinHash = undefined;
-        user.emailVerificationExpiresAt = undefined;
-        await user.save();
-
-        // for auto-login
-        // const loginToken = signAccessToken({ userId: user._id.toString(), email: user.email });
-
-        
-        const frontBaseUrl = process.env.FRONT_BASE_URL || "http://localhost:5173";
-        
-        return res.redirect(301, `${frontBaseUrl}/login?activated=1`);
-        
-        // return res.json({ token: loginToken });
-    } catch (err) {
-        // On any failure, redirect with a reason (URL-encoded)
-        const frontBaseUrl = process.env.FRONT_BASE_URL;
-        const reason = encodeURIComponent(err && err.message ? err.message : 'Activation failed');
-
-        return res.redirect(302, `${frontBaseUrl}/login?activated=0&reason=${reason}`);
+    if (!isNonEmptyString(pin) || !isNonEmptyString(token)) {
+        return res.status(400).json({ error: 'Invalid activation data - pin or jwt missing' });
     }
+
+    const secret = process.env.JWT_ACCESS_SECRET;
+
+    if (!secret) {
+        return res.status(500).json({ error: 'Server misconfigured - secret jwt missing' });
+    }
+
+    let decoded;
+
+    try {
+        decoded = jwt.verify(token, secret);
+    } catch (_e) {
+        return res.status(400).json({ error: 'Invalid or expired token' });
+    }
+
+    const email = decoded && decoded.email;
+
+    if (!isValidEmail(email)) {
+        return res.status(400).json({ error: 'Invalid token payload' });
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase() });
+
+    if (!user) {
+        return res.status(400).json({ error: 'User not found' });
+    }
+
+    if (!user.emailVerificationPinHash || !user.emailVerificationExpiresAt) {
+        return res.status(400).json({ error: 'Activation not initialized' });
+    }
+    if (user.emailVerificationExpiresAt.getTime() < Date.now()) {
+        return res.status(400).json({ error: 'PIN expired' });
+    }
+    const ok = await bcrypt.compare(pin, user.emailVerificationPinHash);
+
+    if (!ok) {
+        return res.status(400).json({ error: 'Invalid PIN' });
+    }
+
+    user.status = 'active';
+    user.emailVerificationPinHash = undefined;
+    user.emailVerificationExpiresAt = undefined;
+    await user.save();
+
+    return res.status(200).json({ message: 'Account activated successfully' });
 });
 
 // POST /login
