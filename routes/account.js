@@ -126,6 +126,10 @@ router.post('/transactions', async (req, res, next) => {
                     if (!sender) {
                         throw Object.assign(new Error('Sender not found'), { status: 400 });
                     }
+
+                    if (sender.email.toLowerCase() == recipientEmail.toLowerCase()) {
+                        throw Object.assign(new Error('You cannot send money to yourself'), { status: 400 });
+                    }
                     
                     const recipient = await User.findOne({ email: recipientEmail.toLowerCase() }).session(session);
 
@@ -168,6 +172,10 @@ router.post('/transactions', async (req, res, next) => {
 
                 if (!sender) {
                     return res.status(400).json({ error: 'Sender not found' });
+                }
+
+                if (sender.email.toLowerCase() == recipientEmail.toLowerCase()) {
+                    throw Object.assign(new Error('You cannot send money to yourself'), { status: 400 });
                 }
                 
                 const recipient = await User.findOne({ email: recipientEmail.toLowerCase() });
