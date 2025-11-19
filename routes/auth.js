@@ -92,7 +92,7 @@ router.post('/signup', async (req, res, next) => {
     await user.save();
 
     const appBase = process.env.FRONT_BASE_URL;
-    const activationUrl = `${appBase}/api/v1/auth/${pin}/${activationJWT}`;
+    const activationUrl = `${appBase}/auth/${pin}/${activationJWT}`;
 
     // sending mail to activate account
     try {
